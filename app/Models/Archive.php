@@ -11,12 +11,22 @@ class Archive extends Model
 
     // Keamanan: Hanya kolom ini yang boleh diisi
     protected $fillable = [
-        'nomor_arsip', 'judul', 'tahun', 'file_path', 'user_id'
+        'nomor_surat',
+        'judul_surat',
+        'file_path',
+        'folder_id', // <--- Tambah ini
+        'year',      // <--- Tambah ini
+        'category',  // <--- Tambah ini
     ];
 
     // Relasi: Arsip ini milik siapa?
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function folder()
+    {
+        return $this->belongsTo(Folder::class);
     }
 }
