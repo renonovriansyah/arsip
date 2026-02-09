@@ -22,5 +22,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // Gunakan style Bootstrap 5 untuk nomor halaman
         Paginator::useBootstrapFive();
+        // Tambahkan kode ini:
+        if (env('APP_ENV') !== 'local') {
+            \Illuminate\Support\Facades\URL::forceScheme('https');
+        }
     }
 }
