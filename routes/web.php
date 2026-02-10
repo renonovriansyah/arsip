@@ -59,4 +59,13 @@ Route::middleware(['auth'])->group(function () {
     // --- FITUR AKUN / PENGATURAN ---
     Route::get('/ganti-password', [AuthController::class, 'showChangePasswordForm'])->name('password.edit');
     Route::post('/ganti-password', [AuthController::class, 'updatePassword'])->name('password.update');
+
+    // Route untuk membuat folder baru
+    Route::post('/folders', [App\Http\Controllers\ArchiveController::class, 'storeFolder'])->name('folders.store');
+
+    // Route untuk memindahkan file ke folder lain
+    Route::put('/archives/{id}/move', [App\Http\Controllers\ArchiveController::class, 'move'])->name('archives.move');
+
+    Route::put('/folders/{id}', [App\Http\Controllers\ArchiveController::class, 'updateFolder'])->name('folders.update');
+    Route::delete('/folders/{id}', [App\Http\Controllers\ArchiveController::class, 'destroyFolder'])->name('folders.destroy');
 });
