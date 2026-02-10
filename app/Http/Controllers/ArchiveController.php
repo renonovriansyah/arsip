@@ -39,7 +39,7 @@ class ArchiveController extends Controller
                 $query->where('category', $request->category);
             }
 
-            // --- PERBAIKAN: Masukkan Logika "Brute Force" di sini juga! ---
+            // Logika "Brute Force" (Cari Kecil & Besar)
             if ($request->filled('q')) {
                 $keyword = $request->q;
                 
@@ -69,7 +69,7 @@ class ArchiveController extends Controller
     }
 
     // ==========================================
-    // 2. BUAT FOLDER BARU (DENGAN VALIDASI DUPLIKAT)
+    // 2. BUAT FOLDER BARU
     // ==========================================
     public function storeFolder(Request $request)
     {
@@ -80,14 +80,12 @@ class ArchiveController extends Controller
             'parent_id' => 'nullable|exists:folders,id'
         ]);
 
-        // --- VALIDASI NAMA KEMBAR ---
-        // Cek apakah ada folder dengan nama SAMA di induk yang SAMA
+        // Validasi Nama Kembar
         $duplicate = Folder::where('name', $request->name)
                            ->where('parent_id', $request->parent_id)
                            ->exists();
 
         if ($duplicate) {
-            // Jika ada, kembalikan dengan pesan error (pastikan di view ada alert session('error'))
             return back()->with('error', 'Gagal! Folder dengan nama "' . $request->name . '" sudah ada di sini.');
         }
 
@@ -108,13 +106,13 @@ class ArchiveController extends Controller
         if (Auth::user()->role !== 'admin') { abort(403); }
         
         $folder_id = $request->query('folder_id');
-        $allFolders = Folder::all(); // Kirim data semua folder untuk dropdown
+        $allFolders = Folder::all(); 
         
         return view('dashboard.create', compact('folder_id', 'allFolders'));
     }
 
     // ==========================================
-    // 4. PROSES SIMPAN ARSIP (UPLOAD)
+    // 4. PROSES SIMPAN ARSIP (UPLOAD) -> FIXED CLOUDINARY
     // ==========================================
     public function store(Request $request)
     {
@@ -132,7 +130,9 @@ class ArchiveController extends Controller
         if ($request->hasFile('file_arsip')) {
             $file = $request->file('file_arsip');
             $filename = time() . '_' . str_replace(' ', '-', $file->getClientOriginalName());
-            $path = $file->storeAs('archives', $filename, 'public');
+            
+            // PERBAIKAN: Gunakan 'cloudinary' (bukan 'public')
+            $path = $file->storeAs('archives', $filename, 'cloudinary');
         }
 
         Archive::create([
@@ -146,7 +146,7 @@ class ArchiveController extends Controller
         ]);
 
         return redirect()->route('dashboard', ['folder_id' => $request->folder_id])
-                         ->with('success', 'Arsip berhasil diunggah! 📄');
+                         ->with('success', 'Arsip berhasil diunggah ke Cloud! ☁️');
     }
 
     // ==========================================
@@ -156,24 +156,18 @@ class ArchiveController extends Controller
     {
         $query = Archive::query();
 
-        // Filter Keyword: Logika "Brute Force" (Cari Kecil & Besar Sekaligus)
-            if ($request->filled('q')) {
-                $keyword = $request->q;
-                
-                $query->where(function($q) use ($keyword) {
-                    // 1. Cari apa adanya (sesuai ketikan user)
-                    $q->where('judul', 'like', '%' . $keyword . '%')
-                      ->orWhere('nomor_arsip', 'like', '%' . $keyword . '%')
-                      
-                    // 2. Cari versi HURUF KECIL (untuk jaga-jaga)
-                      ->orWhere('judul', 'like', '%' . strtolower($keyword) . '%')
-                      ->orWhere('nomor_arsip', 'like', '%' . strtolower($keyword) . '%')
-                      
-                    // 3. Cari versi HURUF BESAR (Solusi masalah Anda!)
-                      ->orWhere('judul', 'like', '%' . strtoupper($keyword) . '%')
-                      ->orWhere('nomor_arsip', 'like', '%' . strtoupper($keyword) . '%');
-                });
-            }
+        if ($request->filled('q')) {
+            $keyword = $request->q;
+            
+            $query->where(function($q) use ($keyword) {
+                $q->where('judul', 'like', '%' . $keyword . '%')
+                  ->orWhere('nomor_arsip', 'like', '%' . $keyword . '%')
+                  ->orWhere('judul', 'like', '%' . strtolower($keyword) . '%')
+                  ->orWhere('nomor_arsip', 'like', '%' . strtolower($keyword) . '%')
+                  ->orWhere('judul', 'like', '%' . strtoupper($keyword) . '%')
+                  ->orWhere('nomor_arsip', 'like', '%' . strtoupper($keyword) . '%');
+            });
+        }
 
         if ($request->filled('year')) {
             $query->where('tahun', $request->year);
@@ -187,13 +181,13 @@ class ArchiveController extends Controller
     }
 
     // ==========================================
-    // 6. EDIT & UPDATE
+    // 6. EDIT & UPDATE -> FIXED CLOUDINARY
     // ==========================================
     public function edit($id)
     {
         if (Auth::user()->role !== 'admin') { abort(403); }
         $archive = Archive::findOrFail($id);
-        $allFolders = Folder::all(); // Tambahan jika ingin pindah folder saat edit
+        $allFolders = Folder::all(); 
         return view('dashboard.edit', compact('archive', 'allFolders'));
     }
 
@@ -212,12 +206,16 @@ class ArchiveController extends Controller
         ]);
 
         if ($request->hasFile('file_arsip')) {
-            if ($archive->file_path && Storage::disk('public')->exists($archive->file_path)) {
-                Storage::disk('public')->delete($archive->file_path);
+            // Hapus file lama di Cloudinary
+            if ($archive->file_path && Storage::disk('cloudinary')->exists($archive->file_path)) {
+                Storage::disk('cloudinary')->delete($archive->file_path);
             }
+            
             $file = $request->file('file_arsip');
             $filename = time() . '_' . str_replace(' ', '-', $file->getClientOriginalName());
-            $path = $file->storeAs('archives', $filename, 'public');
+            
+            // Upload file baru ke Cloudinary
+            $path = $file->storeAs('archives', $filename, 'cloudinary');
             $archive->file_path = $path;
         }
 
@@ -233,7 +231,7 @@ class ArchiveController extends Controller
     }
 
     // ==========================================
-    // 7. HAPUS FILE (DENGAN PROTEKSI PASSWORD)
+    // 7. HAPUS FILE -> FIXED CLOUDINARY
     // ==========================================
     public function destroy(Request $request, $id)
     {
@@ -247,8 +245,9 @@ class ArchiveController extends Controller
 
         $archive = Archive::findOrFail($id);
 
-        if ($archive->file_path && Storage::disk('public')->exists($archive->file_path)) {
-            Storage::disk('public')->delete($archive->file_path);
+        // Hapus dari Cloudinary
+        if ($archive->file_path && Storage::disk('cloudinary')->exists($archive->file_path)) {
+            Storage::disk('cloudinary')->delete($archive->file_path);
         }
 
         $currentFolderId = $archive->folder_id;
@@ -276,7 +275,7 @@ class ArchiveController extends Controller
     }
 
     // ==========================================
-    // 9. UPDATE FOLDER (RENAME - DENGAN VALIDASI DUPLIKAT)
+    // 9. UPDATE FOLDER (RENAME)
     // ==========================================
     public function updateFolder(Request $request, $id)
     {
@@ -286,11 +285,9 @@ class ArchiveController extends Controller
         
         $folder = Folder::findOrFail($id);
 
-        // --- VALIDASI NAMA KEMBAR SAAT RENAME ---
-        // Cek folder lain (kecuali dirinya sendiri) di parent yang sama
         $duplicate = Folder::where('name', $request->name)
                            ->where('parent_id', $folder->parent_id)
-                           ->where('id', '!=', $id) // Kecualikan folder ini sendiri
+                           ->where('id', '!=', $id) 
                            ->exists();
 
         if ($duplicate) {
@@ -310,30 +307,27 @@ class ArchiveController extends Controller
     {
         if (Auth::user()->role !== 'admin') { abort(403); }
 
-        // 1. Cek Password Admin (Keamanan)
         if (!Hash::check($request->password_konfirmasi, Auth::user()->password)) {
             return back()->withErrors(['password_konfirmasi' => 'Password salah!']);
         }
 
         $folder = Folder::with(['archives', 'children'])->findOrFail($id);
         
-        // 2. Jalankan Pembersihan Total (Rekursif)
         $this->recursiveDelete($folder);
 
         return back()->with('success', 'Folder dan seluruh isinya berhasil dihapus.');
     }
 
     /**
-     * Fungsi Pembantu untuk menghapus folder sampai ke akar-akarnya.
-     * Menghapus file fisik PDF, data arsip, dan sub-folder.
+     * Fungsi Pembantu: Hapus folder + isi (Cloudinary Aware)
      */
     private function recursiveDelete($folder)
     {
         // A. Hapus semua FILE ARSIP di dalam folder ini
         foreach ($folder->archives as $archive) {
-            // Hapus file fisik PDF di penyimpanan
-            if ($archive->file_path && Storage::disk('public')->exists($archive->file_path)) {
-                Storage::disk('public')->delete($archive->file_path);
+            // Hapus file fisik di Cloudinary
+            if ($archive->file_path && Storage::disk('cloudinary')->exists($archive->file_path)) {
+                Storage::disk('cloudinary')->delete($archive->file_path);
             }
             // Hapus data di database
             $archive->delete();
@@ -341,7 +335,7 @@ class ArchiveController extends Controller
 
         // B. Cek apakah punya SUB-FOLDER (Anak Folder)? Hapus juga!
         foreach ($folder->children as $child) {
-            $this->recursiveDelete($child); // Panggil fungsi ini lagi untuk si anak (Looping)
+            $this->recursiveDelete($child); 
         }
 
         // C. Terakhir, hapus FOLDER itu sendiri
